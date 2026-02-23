@@ -29,9 +29,7 @@
         .item-card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); cursor: pointer; position: relative; border-top: 4px solid var(--primary); }
         .del-btn { position: absolute; top: 10px; right: 10px; background: #fee2e2; color: var(--danger); border: none; border-radius: 4px; padding: 4px 8px; cursor: pointer; font-size: 11px; z-index: 5; }
 
-        /* オートリンクのスタイル */
         .auto-link { color: var(--link); text-decoration: underline; font-weight: bold; cursor: pointer; }
-        .auto-link:hover { color: var(--accent); }
 
         /* モーダル */
         .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: none; justify-content: center; align-items: center; z-index: 1000; }
@@ -47,10 +45,14 @@
         .note { width: 180px; height: 180px; background: #fff9c4; padding: 15px; box-shadow: 3px 3px 8px rgba(0,0,0,0.2); position: relative; display: flex; flex-direction: column; flex-shrink: 0; }
         .note-edit { flex-grow: 1; border: none; background: transparent; resize: none; outline: none; font-size: 0.95rem; }
 
-        .btn { padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-weight: bold; transition: 0.2s; }
+        .btn { padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-weight: bold; transition: 0.2s; display: inline-flex; align-items: center; gap: 5px; }
         .btn-main { background: var(--primary); color: white; margin-bottom: 20px; }
-        .btn-save { background: var(--primary); color: white; width: 100%; margin-top: 10px; font-size: 1.1rem; }
-        .btn-close { background: #e2e8f0; color: #4a5568; margin-top: 10px; width: 100%; }
+        .btn-save { background: var(--primary); color: white; width: 100%; margin-top: 10px; justify-content: center; }
+        .btn-close { background: #e2e8f0; color: #4a5568; margin-top: 10px; width: 100%; justify-content: center; }
+        
+        /* データ管理用 */
+        .data-card { background: white; border-radius: 12px; padding: 30px; border: 1px dashed #cbd5e0; text-align: center; }
+        #file-input { display: none; }
     </style>
 </head>
 <body>
@@ -62,6 +64,7 @@
         <div class="nav-item" id="nav-world" onclick="showTab('world')">🌍 世界設定</div>
         <div class="nav-item" id="nav-config" onclick="showTab('config')">⚙ 質問設定</div>
         <div class="nav-item" id="nav-board" onclick="showTab('board')">📌 アイデアボード</div>
+        <div class="nav-item" id="nav-data" onclick="showTab('data')">💾 データ管理</div>
     </nav>
 
     <main id="tab-char" class="main-content active">
@@ -87,6 +90,26 @@
         <button class="btn btn-main" onclick="addNote()">+ 付箋を追加</button>
         <div class="board" id="cork-board"></div>
     </main>
+
+    <main id="tab-data" class="main-content">
+        <h2>データの保存と復元</h2>
+        <p>作品データをファイルとしてローカルに保存したり、過去のバックアップから復元できます。</p>
+        
+        <div class="data-card">
+            <h3>エクスポート</h3>
+            <p>現在の全設定を <strong>aerial_data.json</strong> としてダウンロードします。</p>
+            <button class="btn btn-main" onclick="downloadJSON()">ファイルをダウンロード</button>
+            <hr style="margin: 30px 0; border: none; border-top: 1px solid #eee;">
+            <h3>インポート</h3>
+            <p>保存した <strong>.json</strong> ファイルを選択して読み込みます。</p>
+            <label for="file-input" class="btn" style="background: var(--accent); color: white; cursor: pointer;">
+                ファイルを選択して読み込む
+            </label>
+            <input type="file" id="file-input" accept=".json" onchange="importJSON(event)">
+            <p id="file-name" style="margin-top:10px; font-size: 14px; color: var(--text-main);"></p>
+        </div>
+        <p style="font-size:12px; color:var(--danger); margin-top:20px;">※インポートを実行すると、現在のブラウザ内データは完全に上書きされます。ご注意ください。</p>
+    </main>
 </div>
 
 <div id="modal" class="modal">
@@ -104,7 +127,7 @@
     let db = { characters: [], worlds: [], notes: [], questions: ["大事にしているものは？", "窮地に追い込むには？"] };
 
     window.onload = () => {
-        const saved = localStorage.getItem('aerial_link_db');
+        const saved = localStorage.getItem('aerial_final_v3');
         if (saved) db = JSON.parse(saved);
         renderAll();
     };
@@ -117,134 +140,101 @@
         if(tabId === 'config') renderQuestionConfig();
     }
 
-    // --- オートリンク生成ロジック ---
+    // --- ファイルダウンロード (Export) ---
+    function downloadJSON() {
+        const dataStr = JSON.stringify(db, null, 2);
+        const blob = new Blob([dataStr], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `aerial_data_${new Date().toISOString().slice(0,10)}.json`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    }
+
+    // --- ファイルアップロード (Import) ---
+    function importJSON(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        document.getElementById('file-name').innerText = `選択中: ${file.name}`;
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const parsed = JSON.parse(e.target.result);
+                if (confirm("ファイルを読み込みますか？現在のデータは上書きされます。")) {
+                    db = parsed;
+                    updateStorage();
+                    renderAll();
+                    alert("データの読み込みが完了しました。");
+                }
+            } catch (err) {
+                alert("エラー: 正しいJSONファイルではありません。");
+            }
+        };
+        reader.readAsText(file);
+    }
+
+    // --- 既存ロジック ---
     function applyAutoLinks(text) {
         if (!text) return "";
-        let linkedText = text.replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-        
-        // 全キーワード（キャラ名と世界設定名）を抽出
-        const keywords = [
-            ...db.characters.map(c => ({ name: c.name, type: 'char', id: c.id })),
-            ...db.worlds.map(w => ({ name: w.name, type: 'world', id: w.id }))
-        ].sort((a, b) => b.name.length - a.name.length); // 長い名前から順に処理
-
-        keywords.forEach(kw => {
-            if (!kw.name) return;
-            const regex = new RegExp(`(${kw.name})`, 'g');
-            // 二重リンクを防ぐため、まだリンクされていない部分のみ置換（簡易的な実装）
-            linkedText = linkedText.replace(regex, `<span class="auto-link" onclick="event.stopPropagation(); jumpTo('${kw.type}', ${kw.id})">$1</span>`);
-        });
-        return linkedText;
+        let linked = text.replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+        const kws = [...db.characters.map(c=>({n:c.name,t:'char',id:c.id})),...db.worlds.map(w=>({n:w.name,t:'world',id:w.id}))].sort((a,b)=>b.n.length - a.n.length);
+        kws.forEach(kw => { if(kw.n) linked = linked.replace(new RegExp(`(${kw.n})`, 'g'), `<span class="auto-link" onclick="event.stopPropagation(); jumpTo('${kw.t}', ${kw.id})">$1</span>`); });
+        return linked;
     }
-
-    function jumpTo(type, id) {
-        showTab(type);
-        openModal(type, id);
-    }
-
-    // --- 質問設定 ---
+    function jumpTo(t, id) { showTab(t); openModal(t, id); }
     function renderQuestionConfig() {
-        const list = document.getElementById('custom-q-list');
-        list.innerHTML = db.questions.map((q, i) => `
+        document.getElementById('custom-q-list').innerHTML = db.questions.map((q, i) => `
             <div style="display:flex; gap:10px; margin-bottom:10px;">
                 <input type="text" value="${q}" onchange="db.questions[${i}]=this.value; updateStorage();">
-                <button class="btn" style="background:var(--danger); color:white; padding:5px 10px;" onclick="db.questions.splice(${i},1); updateStorage(); renderQuestionConfig();">削除</button>
-            </div>
-        `).join('');
+                <button class="btn" style="background:var(--danger); color:white;" onclick="db.questions.splice(${i},1); updateStorage(); renderQuestionConfig();">削除</button>
+            </div>`).join('');
     }
-    function addQuestionTemplate() { db.questions.push("新質問"); updateStorage(); renderQuestionConfig(); }
-
-    // --- モーダル ---
+    function addQuestionTemplate() { db.questions.push("新質問"); updateStorage(); renderAll(); renderQuestionConfig(); }
     function openModal(type, id = null) {
         const modal = document.getElementById('modal');
         const fields = document.getElementById('form-fields');
         document.getElementById('edit-type').value = type;
         document.getElementById('edit-id').value = id || "";
         modal.style.display = 'flex';
-
-        let target = id ? db[type === 'char' ? 'characters' : 'worlds'].find(item => item.id == id) : {};
-
+        let target = id ? db[type==='char'?'characters':'worlds'].find(item => item.id == id) : {};
         if (type === 'char') {
-            document.getElementById('modal-title').innerText = "キャラクター設定";
-            let qHtml = db.questions.map(q => `
-                <div class="q-box"><label>❓ ${q}</label>
-                <textarea class="dynamic-q" data-qname="${q}">${target.answers ? (target.answers[q] || "") : ""}</textarea></div>
-            `).join('');
-            fields.innerHTML = `
-                <div class="form-group"><label>名前</label><input type="text" id="f-name" value="${target.name || ''}"></div>
-                <div class="form-group"><label>外見・特徴</label><textarea id="f-app">${target.app || ''}</textarea></div>
-                ${qHtml}
-            `;
+            document.getElementById('modal-title').innerText = "キャラ設定";
+            let qHtml = db.questions.map(q => `<div class="q-box"><label>❓ ${q}</label><textarea class="dynamic-q" data-qname="${q}">${target.answers ? (target.answers[q] || "") : ""}</textarea></div>`).join('');
+            fields.innerHTML = `<div class="form-group"><label>名前</label><input type="text" id="f-name" value="${target.name || ''}"></div><div class="form-group"><label>外見</label><textarea id="f-app">${target.app || ''}</textarea></div>${qHtml}`;
         } else {
             document.getElementById('modal-title').innerText = "世界設定";
-            fields.innerHTML = `
-                <div class="form-group"><label>項目名</label><input type="text" id="f-name" value="${target.name || ''}"></div>
-                <div class="form-group"><label>詳細設定</label><textarea id="f-detail">${target.detail || ''}</textarea></div>
-            `;
+            fields.innerHTML = `<div class="form-group"><label>項目名</label><input type="text" id="f-name" value="${target.name || ''}"></div><div class="form-group"><label>詳細</label><textarea id="f-detail">${target.detail || ''}</textarea></div>`;
         }
     }
-
     function closeModal() { document.getElementById('modal').style.display = 'none'; }
-
     function saveData() {
         const type = document.getElementById('edit-type').value;
         const id = document.getElementById('edit-id').value;
-        const collection = type === 'char' ? 'characters' : 'worlds';
+        const col = type === 'char' ? 'characters' : 'worlds';
         const newData = { id: id ? parseInt(id) : Date.now(), name: document.getElementById('f-name').value || "無題" };
-
-        if (type === 'char') {
-            newData.app = document.getElementById('f-app').value;
-            newData.answers = {};
-            document.querySelectorAll('.dynamic-q').forEach(el => newData.answers[el.dataset.qname] = el.value);
-        } else {
-            newData.detail = document.getElementById('f-detail').value;
-        }
-
-        if (id) {
-            const idx = db[collection].findIndex(item => item.id == id);
-            db[collection][idx] = newData;
-        } else {
-            db[collection].push(newData);
-        }
+        if (type === 'char') { newData.app = document.getElementById('f-app').value; newData.answers = {}; document.querySelectorAll('.dynamic-q').forEach(el => newData.answers[el.dataset.qname] = el.value); }
+        else { newData.detail = document.getElementById('f-detail').value; }
+        if (id) { const idx = db[col].findIndex(item => item.id == id); db[col][idx] = newData; } else { db[col].push(newData); }
         updateStorage(); closeModal(); renderAll();
     }
-
-    function deleteItem(type, id, event) {
-        event.stopPropagation();
-        if (!confirm("削除しますか？")) return;
-        db[type === 'char' ? 'characters' : 'worlds'] = db[type === 'char' ? 'characters' : 'worlds'].filter(item => item.id != id);
-        updateStorage(); renderAll();
-    }
-
+    function deleteItem(type, id, event) { event.stopPropagation(); if (!confirm("削除しますか？")) return; db[type==='char'?'characters':'worlds'] = db[type==='char'?'characters':'worlds'].filter(item => item.id != id); updateStorage(); renderAll(); }
     function renderAll() {
-        document.getElementById('char-list').innerHTML = db.characters.map(c => `
-            <div class="item-card" onclick="openModal('char', ${c.id})">
-                <button class="del-btn" onclick="deleteItem('char', ${c.id}, event)">削除</button>
-                <strong>${c.name}</strong>
-                <p style="font-size:0.8rem; color:#666; margin-top:10px;">${applyAutoLinks(c.app.substring(0,40))}...</p>
-            </div>
-        `).join('');
-        document.getElementById('world-list').innerHTML = db.worlds.map(w => `
-            <div class="item-card" onclick="openModal('world', ${w.id})">
-                <button class="del-btn" onclick="deleteItem('world', ${w.id}, event)">削除</button>
-                <strong>${w.name}</strong>
-                <p style="font-size:0.8rem; color:#666; margin-top:10px;">${applyAutoLinks(w.detail.substring(0,40))}...</p>
-            </div>
-        `).join('');
+        document.getElementById('char-list').innerHTML = db.characters.map(c => `<div class="item-card" onclick="openModal('char', ${c.id})"><button class="del-btn" onclick="deleteItem('char', ${c.id}, event)">削除</button><strong>${c.name}</strong><p style="font-size:0.8rem; color:#666; margin-top:10px;">${applyAutoLinks((c.app||"").substring(0,30))}...</p></div>`).join('');
+        document.getElementById('world-list').innerHTML = db.worlds.map(w => `<div class="item-card" onclick="openModal('world', ${w.id})"><button class="del-btn" onclick="deleteItem('world', ${w.id}, event)">削除</button><strong>${w.name}</strong><p style="font-size:0.8rem; color:#666; margin-top:10px;">${applyAutoLinks((w.detail||"").substring(0,30))}...</p></div>`).join('');
         renderNotes();
     }
-
     function addNote() { db.notes.push({ id: Date.now(), content: "" }); updateStorage(); renderNotes(); }
     function deleteNote(id) { db.notes = db.notes.filter(n => n.id != id); updateStorage(); renderNotes(); }
     function renderNotes() {
-        document.getElementById('cork-board').innerHTML = db.notes.map(n => `
-            <div class="note">
-                <textarea class="note-edit" oninput="const nt=db.notes.find(x=>x.id==${n.id}); nt.content=this.value; updateStorage();" placeholder="メモ...">${n.content}</textarea>
-                <div style="text-align:right;"><span style="cursor:pointer; font-size:11px; color:var(--danger);" onclick="deleteNote(${n.id})">✖ 削除</span></div>
-            </div>
-        `).join('');
+        document.getElementById('cork-board').innerHTML = db.notes.map(n => `<div class="note"><textarea class="note-edit" oninput="db.notes.find(x=>x.id==${n.id}).content=this.value; updateStorage();" placeholder="メモ...">${n.content}</textarea><div style="text-align:right;"><span style="cursor:pointer; font-size:11px; color:var(--danger);" onclick="deleteNote(${n.id})">✖ 削除</span></div></div>`).join('');
     }
-    function updateStorage() { localStorage.setItem('aerial_link_db', JSON.stringify(db)); }
+    function updateStorage() { localStorage.setItem('aerial_final_v3', JSON.stringify(db)); }
 </script>
 </body>
 </html>
