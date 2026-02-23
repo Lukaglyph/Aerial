@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aerial - 創作支援ツール</title>
+    <style>
+        :root {
+            --primary: #5a67d8; --bg: #f8fafc; --sidebar-width: 240px;
+            --card-bg: #ffffff; --text-main: #2d3748; --accent: #ed64a6; --danger: #e53e3e;
+            --link: #3182ce;
+        }
+        body, html { margin: 0; padding: 0; height: 100%; font-family: sans-serif; background: var(--bg); color: var(--text-main); overflow: hidden; }
+        .app-container { display: flex; height: 100vh; width: 100vw; }
+
+        /* サイドバー */
+        .sidebar { width: var(--sidebar-width); flex-shrink: 0; background: #2d3748; color: white; display: flex; flex-direction: column; height: 100%; }
+        .logo { font-size: 1.4rem; font-weight: bold; text-align: center; padding: 30px 0; color: #a3bffa; letter-spacing: 2px; }
+        .nav-item { padding: 15px 25px; cursor: pointer; transition: 0.2s; }
+        .nav-item:hover { background: #4a5568; }
+        .nav-item.active { background: #4a5568; border-left: 5px solid var(--primary); }
+
+        /* メインエリア */
+        .main-content { flex-grow: 1; overflow-y: auto; padding: 40px; display: none; box-sizing: border-box; }
+        .main-content.active { display: block; }
+        .list-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; }
+        
+        /* カード */
+        .item-card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); cursor: pointer; position: relative; border-top: 4px solid var(--primary); }
+        .del-btn { position: absolute; top: 10px; right: 10px; background: #fee2e2; color: var(--danger); border: none; border-radius: 4px; padding: 4px 8px; cursor: pointer; font-size: 11px; z-index: 5; }
+
+        /* オートリンクのスタイル */
+        .auto-link { color: var(--link); text-decoration: underline; font-weight: bold; cursor: pointer; }
+        .auto-link:hover { color: var(--accent); }
+
+        /* モーダル */
+        .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: none; justify-content: center; align-items: center; z-index: 1000; }
+        .modal-content { background: white; width: 90%; max-width: 650px; padding: 30px; border-radius: 15px; max-height: 85vh; overflow-y: auto; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; font-weight: bold; margin-bottom: 5px; font-size: 0.9rem; }
+        input, textarea { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; font-size: 1rem; }
+        
+        .q-box { background: #fff5f7; padding: 15px; border-radius: 8px; margin-top: 10px; border-left: 4px solid var(--accent); }
+
+        /* アイデアボード */
+        .board { background: #d69e7b; border: 10px solid #8b4513; border-radius: 12px; min-height: 500px; display: flex; flex-wrap: wrap; gap: 15px; padding: 20px; align-content: flex-start; }
+        .note { width: 180px; height: 180px; background: #fff9c4; padding: 15px; box-shadow: 3px 3px 8px rgba(0,0,0,0.2); position: relative; display: flex; flex-direction: column; flex-shrink: 0; }
+        .note-edit { flex-grow: 1; border: none; background: transparent; resize: none; outline: none; font-size: 0.95rem; }
+
+        .btn { padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-weight: bold; transition: 0.2s; }
+        .btn-main { background: var(--primary); color: white; margin-bottom: 20px; }
+        .btn-save { background: var(--primary); color: white; width: 100%; margin-top: 10px; font-size: 1.1rem; }
+        .btn-close { background: #e2e8f0; color: #4a5568; margin-top: 10px; width: 100%; }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    <nav class="sidebar">
+        <div class="logo">AERIAL</div>
+        <div class="nav-item active" id="nav-char" onclick="showTab('char')">👤 キャラクター</div>
+        <div class="nav-item" id="nav-world" onclick="showTab('world')">🌍 世界設定</div>
+        <div class="nav-item" id="nav-config" onclick="showTab('config')">⚙ 質問設定</div>
+        <div class="nav-item" id="nav-board" onclick="showTab('board')">📌 アイデアボード</div>
+    </nav>
+
+    <main id="tab-char" class="main-content active">
+        <h2>キャラクター設定</h2>
+        <button class="btn btn-main" onclick="openModal('char')">+ 新規キャラクター</button>
+        <div id="char-list" class="list-grid"></div>
+    </main>
+
+    <main id="tab-world" class="main-content">
+        <h2>世界設定</h2>
+        <button class="btn btn-main" onclick="openModal('world')">+ 新規世界設定</button>
+        <div id="world-list" class="list-grid"></div>
+    </main>
+
+    <main id="tab-config" class="main-content">
+        <h2>深掘り質問のカスタマイズ</h2>
+        <div id="custom-q-list" style="max-width: 500px; margin-bottom: 20px;"></div>
+        <button class="btn btn-main" style="background:#4a5568;" onclick="addQuestionTemplate()">+ 質問項目を追加</button>
+    </main>
+
+    <main id="tab-board" class="main-content">
+        <h2>アイデアボード</h2>
+        <button class="btn btn-main" onclick="addNote()">+ 付箋を追加</button>
+        <div class="board" id="cork-board"></div>
+    </main>
+</div>
+
+<div id="modal" class="modal">
+    <div class="modal-content">
+        <h3 id="modal-title">入力</h3>
+        <input type="hidden" id="edit-id">
+        <input type="hidden" id="edit-type">
+        <div id="form-fields"></div>
+        <button class="btn btn-save" onclick="saveData()">保存する</button>
+        <button class="btn btn-close" onclick="closeModal()">キャンセル</button>
+    </div>
+</div>
+
+<script>
+    let db = { characters: [], worlds: [], notes: [], questions: ["大事にしているものは？", "窮地に追い込むには？"] };
+
+    window.onload = () => {
+        const saved = localStorage.getItem('aerial_link_db');
+        if (saved) db = JSON.parse(saved);
+        renderAll();
+    };
+
+    function showTab(tabId) {
+        document.querySelectorAll('.main-content').forEach(c => c.classList.remove('active'));
+        document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+        document.getElementById('tab-' + tabId).classList.add('active');
+        document.getElementById('nav-' + tabId).classList.add('active');
+        if(tabId === 'config') renderQuestionConfig();
+    }
+
+    // --- オートリンク生成ロジック ---
+    function applyAutoLinks(text) {
+        if (!text) return "";
+        let linkedText = text.replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+        
+        // 全キーワード（キャラ名と世界設定名）を抽出
+        const keywords = [
+            ...db.characters.map(c => ({ name: c.name, type: 'char', id: c.id })),
+            ...db.worlds.map(w => ({ name: w.name, type: 'world', id: w.id }))
+        ].sort((a, b) => b.name.length - a.name.length); // 長い名前から順に処理
+
+        keywords.forEach(kw => {
+            if (!kw.name) return;
+            const regex = new RegExp(`(${kw.name})`, 'g');
+            // 二重リンクを防ぐため、まだリンクされていない部分のみ置換（簡易的な実装）
+            linkedText = linkedText.replace(regex, `<span class="auto-link" onclick="event.stopPropagation(); jumpTo('${kw.type}', ${kw.id})">$1</span>`);
+        });
+        return linkedText;
+    }
+
+    function jumpTo(type, id) {
+        showTab(type);
+        openModal(type, id);
+    }
+
+    // --- 質問設定 ---
+    function renderQuestionConfig() {
+        const list = document.getElementById('custom-q-list');
+        list.innerHTML = db.questions.map((q, i) => `
+            <div style="display:flex; gap:10px; margin-bottom:10px;">
+                <input type="text" value="${q}" onchange="db.questions[${i}]=this.value; updateStorage();">
+                <button class="btn" style="background:var(--danger); color:white; padding:5px 10px;" onclick="db.questions.splice(${i},1); updateStorage(); renderQuestionConfig();">削除</button>
+            </div>
+        `).join('');
+    }
+    function addQuestionTemplate() { db.questions.push("新質問"); updateStorage(); renderQuestionConfig(); }
+
+    // --- モーダル ---
+    function openModal(type, id = null) {
+        const modal = document.getElementById('modal');
+        const fields = document.getElementById('form-fields');
+        document.getElementById('edit-type').value = type;
+        document.getElementById('edit-id').value = id || "";
+        modal.style.display = 'flex';
+
+        let target = id ? db[type === 'char' ? 'characters' : 'worlds'].find(item => item.id == id) : {};
+
+        if (type === 'char') {
+            document.getElementById('modal-title').innerText = "キャラクター設定";
+            let qHtml = db.questions.map(q => `
+                <div class="q-box"><label>❓ ${q}</label>
+                <textarea class="dynamic-q" data-qname="${q}">${target.answers ? (target.answers[q] || "") : ""}</textarea></div>
+            `).join('');
+            fields.innerHTML = `
+                <div class="form-group"><label>名前</label><input type="text" id="f-name" value="${target.name || ''}"></div>
+                <div class="form-group"><label>外見・特徴</label><textarea id="f-app">${target.app || ''}</textarea></div>
+                ${qHtml}
+            `;
+        } else {
+            document.getElementById('modal-title').innerText = "世界設定";
+            fields.innerHTML = `
+                <div class="form-group"><label>項目名</label><input type="text" id="f-name" value="${target.name || ''}"></div>
+                <div class="form-group"><label>詳細設定</label><textarea id="f-detail">${target.detail || ''}</textarea></div>
+            `;
+        }
+    }
+
+    function closeModal() { document.getElementById('modal').style.display = 'none'; }
+
+    function saveData() {
+        const type = document.getElementById('edit-type').value;
+        const id = document.getElementById('edit-id').value;
+        const collection = type === 'char' ? 'characters' : 'worlds';
+        const newData = { id: id ? parseInt(id) : Date.now(), name: document.getElementById('f-name').value || "無題" };
+
+        if (type === 'char') {
+            newData.app = document.getElementById('f-app').value;
+            newData.answers = {};
+            document.querySelectorAll('.dynamic-q').forEach(el => newData.answers[el.dataset.qname] = el.value);
+        } else {
+            newData.detail = document.getElementById('f-detail').value;
+        }
+
+        if (id) {
+            const idx = db[collection].findIndex(item => item.id == id);
+            db[collection][idx] = newData;
+        } else {
+            db[collection].push(newData);
+        }
+        updateStorage(); closeModal(); renderAll();
+    }
+
+    function deleteItem(type, id, event) {
+        event.stopPropagation();
+        if (!confirm("削除しますか？")) return;
+        db[type === 'char' ? 'characters' : 'worlds'] = db[type === 'char' ? 'characters' : 'worlds'].filter(item => item.id != id);
+        updateStorage(); renderAll();
+    }
+
+    function renderAll() {
+        document.getElementById('char-list').innerHTML = db.characters.map(c => `
+            <div class="item-card" onclick="openModal('char', ${c.id})">
+                <button class="del-btn" onclick="deleteItem('char', ${c.id}, event)">削除</button>
+                <strong>${c.name}</strong>
+                <p style="font-size:0.8rem; color:#666; margin-top:10px;">${applyAutoLinks(c.app.substring(0,40))}...</p>
+            </div>
+        `).join('');
+        document.getElementById('world-list').innerHTML = db.worlds.map(w => `
+            <div class="item-card" onclick="openModal('world', ${w.id})">
+                <button class="del-btn" onclick="deleteItem('world', ${w.id}, event)">削除</button>
+                <strong>${w.name}</strong>
+                <p style="font-size:0.8rem; color:#666; margin-top:10px;">${applyAutoLinks(w.detail.substring(0,40))}...</p>
+            </div>
+        `).join('');
+        renderNotes();
+    }
+
+    function addNote() { db.notes.push({ id: Date.now(), content: "" }); updateStorage(); renderNotes(); }
+    function deleteNote(id) { db.notes = db.notes.filter(n => n.id != id); updateStorage(); renderNotes(); }
+    function renderNotes() {
+        document.getElementById('cork-board').innerHTML = db.notes.map(n => `
+            <div class="note">
+                <textarea class="note-edit" oninput="const nt=db.notes.find(x=>x.id==${n.id}); nt.content=this.value; updateStorage();" placeholder="メモ...">${n.content}</textarea>
+                <div style="text-align:right;"><span style="cursor:pointer; font-size:11px; color:var(--danger);" onclick="deleteNote(${n.id})">✖ 削除</span></div>
+            </div>
+        `).join('');
+    }
+    function updateStorage() { localStorage.setItem('aerial_link_db', JSON.stringify(db)); }
+</script>
+</body>
+</html>
